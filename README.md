@@ -84,21 +84,27 @@ The tests will:
 
 ### CI/CD
 
-The tests run automatically in GitHub Actions on:
-- Pull requests to `main`
-- Pushes to `main`
+The E2E tests can be run manually in GitHub Actions using the "E2E Tests" workflow:
 
-The CI uses an optimized two-stage approach:
+**Manual Workflow Trigger**
+- Navigate to Actions → E2E Tests → Run workflow
+- Specify the GitHub release tag to test (e.g., `v0.4.2`)
+- Choose the TX3 channel to test (`stable`, `nightly`, or `beta`)
 
-**Stage 1: Build Binaries** (4 jobs)
-- Ubuntu Intel (x86_64-unknown-linux-gnu)
-- Ubuntu ARM (aarch64-unknown-linux-gnu)  
-- macOS Intel (x86_64-apple-darwin)
-- macOS ARM (aarch64-apple-darwin)
+**How it works:**
 
-**Stage 2: Run Tests** (9 jobs)
-- Downloads the appropriate binary artifact
-- Runs tests with different scenarios and channels
-- Provides ~90% reduction in build time vs building for each test
+**Stage 1: Download Binaries** (4 jobs)
+- Downloads release binaries from GitHub releases for each platform:
+  - Ubuntu Intel (x86_64-unknown-linux-gnu)
+  - Ubuntu ARM (aarch64-unknown-linux-gnu)  
+  - macOS Intel (x86_64-apple-darwin)
+  - macOS ARM (aarch64-apple-darwin)
 
-Check the `.github/workflows/e2e.yml` file for the complete CI configuration.
+**Stage 2: Run Tests** (8 jobs)
+- Downloads the appropriate binary for each platform
+- Runs both `fresh_install` and `update_install` tests
+- Tests against the specified channel
+
+This approach tests actual released binaries rather than building from source, ensuring the published artifacts work correctly.
+
+Check the `.github/workflows/e2e.yml` file for the complete workflow configuration.
