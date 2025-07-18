@@ -84,12 +84,21 @@ The tests will:
 
 ### CI/CD
 
-The tests also run automatically in GitHub Actions on:
+The tests run automatically in GitHub Actions on:
 - Pull requests to `main`
 - Pushes to `main`
 
-The CI runs tests on multiple platforms:
-- Ubuntu (Intel & ARM)
-- macOS (Intel & ARM)
+The CI uses an optimized two-stage approach:
+
+**Stage 1: Build Binaries** (4 jobs)
+- Ubuntu Intel (x86_64-unknown-linux-gnu)
+- Ubuntu ARM (aarch64-unknown-linux-gnu)  
+- macOS Intel (x86_64-apple-darwin)
+- macOS ARM (aarch64-apple-darwin)
+
+**Stage 2: Run Tests** (9 jobs)
+- Downloads the appropriate binary artifact
+- Runs tests with different scenarios and channels
+- Provides ~90% reduction in build time vs building for each test
 
 Check the `.github/workflows/e2e.yml` file for the complete CI configuration.

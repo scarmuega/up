@@ -10,8 +10,9 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  e2e-tests:
-    name: E2E Tests (${{ matrix.os }}-${{ matrix.arch }}, ${{ matrix.test }}, ${{ matrix.channel }})
+  # Build tx3up binary for each OS/arch combination
+  build-binaries:
+    name: Build tx3up (${{ matrix.os }}-${{ matrix.arch }})
     runs-on: ${{ matrix.runner }}
     
     strategy:
@@ -22,55 +23,29 @@ jobs:
           - os: ubuntu
             arch: intel
             runner: ubuntu-latest
-            test: fresh_install
-            channel: stable
-          - os: ubuntu
-            arch: intel
-            runner: ubuntu-latest
-            test: update_install
-            channel: stable
-          # Test with different channel on Ubuntu Intel
-          - os: ubuntu
-            arch: intel
-            runner: ubuntu-latest
-            test: fresh_install
-            channel: nightly
+            target: x86_64-unknown-linux-gnu
+            artifact_name: tx3up-ubuntu-intel
           
-          # Ubuntu ARM (using emulation)
+          # Ubuntu ARM
           - os: ubuntu
             arch: arm
             runner: ubuntu-latest
-            test: fresh_install
-            channel: stable
-          - os: ubuntu
-            arch: arm
-            runner: ubuntu-latest
-            test: update_install
-            channel: stable
+            target: aarch64-unknown-linux-gnu
+            artifact_name: tx3up-ubuntu-arm
           
           # macOS Intel
           - os: mac
             arch: intel
-            runner: macos-13  # Intel-based runner
-            test: fresh_install
-            channel: stable
-          - os: mac
-            arch: intel
             runner: macos-13
-            test: update_install
-            channel: stable
+            target: x86_64-apple-darwin
+            artifact_name: tx3up-mac-intel
           
           # macOS ARM
           - os: mac
             arch: arm
-            runner: macos-latest  # ARM-based runner (M1)
-            test: fresh_install
-            channel: stable
-          - os: mac
-            arch: arm
             runner: macos-latest
-            test: update_install
-            channel: stable
+            target: aarch64-apple-darwin
+            artifact_name: tx3up-mac-arm
     
     steps:
     - name: Checkout code
@@ -81,12 +56,15 @@ jobs:
       with:
         toolchain: stable
     
-    - name: Set up cross-compilation (ARM on Ubuntu)
-      if: matrix.os == 'ubuntu' && matrix.arch == 'arm'
+    - name: Add target for cross-compilation
+      if: matrix.target != 'x86_64-unknown-linux-gnu' && matrix.target != 'x86_64-apple-darwin'
+      run: rustup target add ${{ matrix.target }}
+    
+    - name: Install cross-compilation tools (Linux ARM)
+      if: matrix.target == 'aarch64-unknown-linux-gnu'
       run: |
         sudo apt-get update
         sudo apt-get install -y gcc-aarch64-linux-gnu
-        rustup target add aarch64-unknown-linux-gnu
         echo "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER=aarch64-linux-gnu-gcc" >> $GITHUB_ENV
     
     - name: Cache Cargo dependencies
@@ -96,29 +74,120 @@ jobs:
           ~/.cargo/registry
           ~/.cargo/git
           target/
-        key: ${{ matrix.runner }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        key: ${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
         restore-keys: |
-          ${{ matrix.runner }}-cargo-
+          ${{ matrix.target }}-cargo-
     
-    - name: Build tx3up (Intel)
-      if: matrix.arch == 'intel'
-      run: cargo build --release
-    
-    - name: Build tx3up (ARM on Ubuntu)
-      if: matrix.os == 'ubuntu' && matrix.arch == 'arm'
-      run: cargo build --release --target aarch64-unknown-linux-gnu
-    
-    - name: Build tx3up (ARM on macOS)
-      if: matrix.os == 'mac' && matrix.arch == 'arm'
-      run: cargo build --release
-    
-    - name: Copy ARM binary to standard location (Ubuntu)
-      if: matrix.os == 'ubuntu' && matrix.arch == 'arm'
+    - name: Build tx3up
       run: |
-        mkdir -p target/release
-        cp target/aarch64-unknown-linux-gnu/release/tx3up target/release/tx3up
+        if [ "${{ matrix.target }}" == "x86_64-unknown-linux-gnu" ] || [ "${{ matrix.target }}" == "x86_64-apple-darwin" ]; then
+          # Native build for x86_64 platforms
+          cargo build --release
+        else
+          # Cross-compilation build
+          cargo build --release --target ${{ matrix.target }}
+          mkdir -p target/release
+          cp target/${{ matrix.target }}/release/tx3up target/release/tx3up
+        fi
     
     - name: Verify binary exists
+      run: |
+        ls -la target/release/tx3up
+        file target/release/tx3up
+    
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: target/release/tx3up
+        retention-days: 1
+    
+  # Run E2E tests using the built binaries
+  e2e-tests:
+    name: E2E Tests (${{ matrix.os }}-${{ matrix.arch }}, ${{ matrix.test }}, ${{ matrix.channel }})
+    runs-on: ${{ matrix.runner }}
+    needs: build-binaries
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu Intel tests
+          - os: ubuntu
+            arch: intel
+            runner: ubuntu-latest
+            artifact_name: tx3up-ubuntu-intel
+            test: fresh_install
+            channel: stable
+          - os: ubuntu
+            arch: intel
+            runner: ubuntu-latest
+            artifact_name: tx3up-ubuntu-intel
+            test: update_install
+            channel: stable
+          - os: ubuntu
+            arch: intel
+            runner: ubuntu-latest
+            artifact_name: tx3up-ubuntu-intel
+            test: fresh_install
+            channel: nightly
+          
+          # Ubuntu ARM tests
+          - os: ubuntu
+            arch: arm
+            runner: ubuntu-latest
+            artifact_name: tx3up-ubuntu-arm
+            test: fresh_install
+            channel: stable
+          - os: ubuntu
+            arch: arm
+            runner: ubuntu-latest
+            artifact_name: tx3up-ubuntu-arm
+            test: update_install
+            channel: stable
+          
+          # macOS Intel tests
+          - os: mac
+            arch: intel
+            runner: macos-13
+            artifact_name: tx3up-mac-intel
+            test: fresh_install
+            channel: stable
+          - os: mac
+            arch: intel
+            runner: macos-13
+            artifact_name: tx3up-mac-intel
+            test: update_install
+            channel: stable
+          
+          # macOS ARM tests
+          - os: mac
+            arch: arm
+            runner: macos-latest
+            artifact_name: tx3up-mac-arm
+            test: fresh_install
+            channel: stable
+          - os: mac
+            arch: arm
+            runner: macos-latest
+            artifact_name: tx3up-mac-arm
+            test: update_install
+            channel: stable
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download tx3up binary
+      uses: actions/download-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: target/release/
+    
+    - name: Make binary executable
+      run: chmod +x target/release/tx3up
+    
+    - name: Verify binary
       run: |
         ls -la target/release/tx3up
         file target/release/tx3up
@@ -169,7 +238,7 @@ jobs:
   e2e-summary:
     name: E2E Tests Summary
     runs-on: ubuntu-latest
-    needs: e2e-tests
+    needs: [build-binaries, e2e-tests]
     if: always()
     
     steps:
@@ -178,8 +247,12 @@ jobs:
         echo "## Overall E2E Test Results" >> $GITHUB_STEP_SUMMARY
         if [[ "${{ needs.e2e-tests.result }}" == "success" ]]; then
           echo "🎉 All E2E tests passed!" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Built binaries for all platforms successfully" >> $GITHUB_STEP_SUMMARY
           exit 0
         else
-          echo "❌ Some E2E tests failed. Check individual job results for details." >> $GITHUB_STEP_SUMMARY
+          echo "❌ Some tests failed. Check individual job results for details." >> $GITHUB_STEP_SUMMARY
+          if [[ "${{ needs.build-binaries.result }}" != "success" ]]; then
+            echo "🔨 Binary build stage failed" >> $GITHUB_STEP_SUMMARY
+          fi
           exit 1
         fi
