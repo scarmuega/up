@@ -11,7 +11,7 @@ env:
 
 jobs:
   e2e-tests:
-    name: E2E Tests (${{ matrix.os }}-${{ matrix.arch }}, ${{ matrix.test }})
+    name: E2E Tests (${{ matrix.os }}-${{ matrix.arch }}, ${{ matrix.test }}, ${{ matrix.channel }})
     runs-on: ${{ matrix.runner }}
     
     strategy:
@@ -23,40 +23,54 @@ jobs:
             arch: intel
             runner: ubuntu-latest
             test: fresh_install
+            channel: stable
           - os: ubuntu
             arch: intel
             runner: ubuntu-latest
             test: update_install
+            channel: stable
+          # Test with different channel on Ubuntu Intel
+          - os: ubuntu
+            arch: intel
+            runner: ubuntu-latest
+            test: fresh_install
+            channel: nightly
           
           # Ubuntu ARM (using emulation)
           - os: ubuntu
             arch: arm
             runner: ubuntu-latest
             test: fresh_install
+            channel: stable
           - os: ubuntu
             arch: arm
             runner: ubuntu-latest
             test: update_install
+            channel: stable
           
           # macOS Intel
           - os: mac
             arch: intel
             runner: macos-13  # Intel-based runner
             test: fresh_install
+            channel: stable
           - os: mac
             arch: intel
             runner: macos-13
             test: update_install
+            channel: stable
           
           # macOS ARM
           - os: mac
             arch: arm
             runner: macos-latest  # ARM-based runner (M1)
             test: fresh_install
+            channel: stable
           - os: mac
             arch: arm
             runner: macos-latest
             test: update_install
+            channel: stable
     
     steps:
     - name: Checkout code
@@ -121,17 +135,18 @@ jobs:
     
     - name: Run E2E test - ${{ matrix.test }}
       run: |
-        echo "Running ${{ matrix.test }} test on ${{ matrix.os }}-${{ matrix.arch }}"
+        echo "Running ${{ matrix.test }} test on ${{ matrix.os }}-${{ matrix.arch }} with channel ${{ matrix.channel }}"
         ./tests/e2e/${{ matrix.test }}.sh
       env:
         # Use a unique root directory for each test run
-        TX3_ROOT_DIR: ${{ github.workspace }}/test-root-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.test }}
+        TX3_ROOT_DIR: ${{ github.workspace }}/test-root-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.test }}-${{ matrix.channel }}
+        TX3_CHANNEL: ${{ matrix.channel }}
     
     - name: Upload test artifacts on failure
       if: failure()
       uses: actions/upload-artifact@v3
       with:
-        name: test-artifacts-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.test }}
+        name: test-artifacts-${{ matrix.os }}-${{ matrix.arch }}-${{ matrix.test }}-${{ matrix.channel }}
         path: |
           ${{ github.workspace }}/test-root-*/
           target/release/tx3up
@@ -144,6 +159,7 @@ jobs:
         echo "- **OS**: ${{ matrix.os }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Architecture**: ${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Test**: ${{ matrix.test }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Channel**: ${{ matrix.channel }}" >> $GITHUB_STEP_SUMMARY
         echo "- **Runner**: ${{ matrix.runner }}" >> $GITHUB_STEP_SUMMARY
         if [[ "${{ job.status }}" == "success" ]]; then
           echo "- **Result**: ✅ PASSED" >> $GITHUB_STEP_SUMMARY

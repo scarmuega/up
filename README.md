@@ -57,6 +57,15 @@ You can customize the test behavior using environment variables:
 export TX3_ROOT_DIR="/tmp/my_tx3_test"
 ./tests/e2e/fresh_install.sh
 
+# Test with a different channel (default is "stable")
+export TX3_CHANNEL="nightly"
+./tests/e2e/fresh_install.sh
+
+# Combine both parameters
+export TX3_ROOT_DIR="/tmp/my_tx3_test"
+export TX3_CHANNEL="beta"
+./tests/e2e/update_install.sh
+
 # The test will automatically clean up after itself
 ```
 
